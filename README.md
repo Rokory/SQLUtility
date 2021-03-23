@@ -11,7 +11,7 @@ It is recommended to copy the folders in Modules to one of the folders indicated
 First, import the module.
 
 ````powershell
-Import-Module <String>
+Import-Module SQLUtility
 ````
 
 You can either use the module name or the full path, if you did not copy the module to one of the paths in $env:PSModulePath.

@@ -44,11 +44,11 @@ function Start-Download {
             Status = $bitsTransfer.JobState
         }
         if ($bitsTransfer.BytesTotal -ne 0) {
-            $progress.PercentComplete = $bitsTransfer.BytesTransferred / $bitsTransfer.BytesTotal
+            $progress.PercentComplete = $bitsTransfer.BytesTransferred / $bitsTransfer.BytesTotal * 100
             if ($progress.PercentComplete -ne 0) {
-                $secondsPassed = (New-TimeSpan -Start $startTime -End (Get-Date)).SecondsTotal
+                $secondsPassed = (New-TimeSpan -Start $startTime -End (Get-Date)).TotalSeconds
                 $secondsTotal = $secondsPassed / ($progress.PercentComplete / 100)
-                $progress.SecondsRemaining =  $secondsTotal - $secondsTotal
+                $progress.SecondsRemaining = $secondsTotal - $secondsPassed
             }
         }
         Write-Progress @progress
@@ -364,9 +364,6 @@ function Install-SqlServerManagementStudio {
     # name with $, preceed it with an @ sign.
     $setupFile = Start-Download @parameters
 
-    # Get the full path of the downloaded setup file
-    $setupFile = $bitsTransfer.FileList[0].LocalName
-    
     #endregion
 
     #region Build the parameters

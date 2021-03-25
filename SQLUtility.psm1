@@ -1,23 +1,3 @@
-function Use-Module {
-    [CmdletBinding()]
-    param (
-        [Parameter(
-            ValueFromPipeline = $true, 
-            ValueFromPipelineByPropertyName = $true)
-        ]
-        [string[]]
-        $Name
-    )
-    BEGIN {}
-    PROCESS {
-        foreach ($moduleName in $Name) {
-            if ($null -eq (Get-Module -Name $moduleName)) {
-                Import-Module -Name $moduleName
-            }
-        }
-    }
-    END {}
-}
 <#
     .SYNOPSIS
     Downloads and optionally installs SQL Server 2019
@@ -118,10 +98,6 @@ function Install-SqlServer {
         $ConfigurationFile
     )
 
-    # Import required modules
-
-    Use-Module -Name 'BITSDownload' -ErrorAction Stop
-
     #region Download SQL server
 
     switch ($Edition) {
@@ -136,13 +112,26 @@ function Install-SqlServer {
     }
 
     # Parameters for Cmdlets can be assembled as hash table
-    $parameters = @{ Source = $downloadPath }
+    $parameters = @{
+        Source = $downloadPath
+        # Defaults to Download folder of user
+        Destination = (
+                New-Object -ComObject Shell.Application
+            ).NameSpace(
+                'shell:Downloads'
+            ).Self.Path
+
+    }
     if (-not [String]::IsNullOrWhiteSpace($BootstrapPath)) {
-        $parameters.Add('Destination', $BootstrapPath)
+        $parameters.Destination = $BootstrapPath
     }
     # To use a hashtable as parameter set, instead of preceeding the variable
     # name with $, preceed it with an @ sign.
-    $setupFile = Invoke-BitsTransfer @parameters
+    $bitsJob = Start-BitsTransfer @parameters -
+
+    # Get the full path of the downloaded setup file
+    $setupFile = $bitsJob.FileList[0].LocalName
+
     #endregion
 
 
@@ -306,12 +295,28 @@ function Install-SqlServerManagementStudio {
          }
     }
     $BootstrapPath += "$Language.exe"
-    $parameters = @{ Source = $downloadPath }
-    if (-not [String]::IsNullOrWhiteSpace($BootstrapPath)) {
-        $parameters.Add('Destination', $BootstrapPath)
-    }
-    $setupFile = Invoke-BitsTransfer @parameters
 
+    # Parameters for Cmdlets can be assembled as hash table
+    $parameters = @{
+        Source = $downloadPath
+        # Defaults to Download folder of user
+        Destination = (
+                New-Object -ComObject Shell.Application
+            ).NameSpace(
+                'shell:Downloads'
+            ).Self.Path
+
+    }
+    if (-not [String]::IsNullOrWhiteSpace($BootstrapPath)) {
+        $parameters.Destination = $BootstrapPath
+    }
+    # To use a hashtable as parameter set, instead of preceeding the variable
+    # name with $, preceed it with an @ sign.
+    $bitsJob = Start-BitsTransfer @parameters
+
+    # Get the full path of the downloaded setup file
+    $setupFile = $bitsJob.FileList[0].LocalName
+    
     #endregion
 
     #region Build the parameters

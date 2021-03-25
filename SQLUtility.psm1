@@ -1,5 +1,65 @@
 <#
     .SYNOPSIS
+    Downloads a file using BITS
+    .DESCRIPTION
+    If Destination is not specified, it defaults to the user's Downloads folder.
+    The function emits the full local paths of the downloaded files
+    .PARAMETER Source
+    URI where the file should be downloaded.
+    .PARAMETER Destination
+    A path where the file should be saved to. Defaults to the user's Download folder.
+#>
+function Start-Download {
+    [OutputType([string])]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]
+        $Source,
+        
+        [Parameter()]
+        [string]
+        # Defaults to Download folder of user
+        $Destination = (
+                New-Object -ComObject Shell.Application
+            ).NameSpace(
+                'shell:Downloads'
+            ).Self.Path
+    )
+    
+    # The Asynchronous parameter must be used to get info about the job,
+    # expecially the local file name
+    Write-Verbose "Starting download from $Source to $Destination"
+    $startTime = Get-Date
+    $bitsTransfer = Start-BitsTransfer -Source $Source -Destination $Destination -Asynchronous 
+    $progress = @{
+        Id = Get-Random
+        Activity = "Download from $Source to $Destination"
+        Status = $bitsTransfer.JobState
+    }
+    While ($bitsTransfer.JobState -ne 'Transferred') {
+        $progress = @{
+            Id = $progress.Id
+            Activity = $progress.Activity
+            Status = $bitsTransfer.JobState
+        }
+        if ($bitsTransfer.BytesTotal -ne 0) {
+            $progress.PercentComplete = $bitsTransfer.BytesTransferred / $bitsTransfer.BytesTotal
+            if ($progress.PercentComplete -ne 0) {
+                $secondsPassed = (New-TimeSpan -Start $startTime -End (Get-Date)).SecondsTotal
+                $secondsTotal = $secondsPassed / ($progress.PercentComplete / 100)
+                $progress.SecondsRemaining =  $secondsTotal - $secondsTotal
+            }
+        }
+        Write-Progress @progress
+        Start-Sleep -Milliseconds 1000
+    }
+    Write-Output $bitsTransfer.FileList.LocalName
+    $bitsTransfer | Complete-BitsTransfer
+    Write-Progress @progress -Completed
+}
+<#
+    .SYNOPSIS
     Downloads and optionally installs SQL Server 2019
     .DESCRIPTION
     If you specify the switch -Download, the setup sources for SQL Server 2019
@@ -110,34 +170,31 @@ function Install-SqlServer {
                 'https://download.microsoft.com/download/7/f/8/7f8a9c43-8c8a-4f7c-9f92-83c18d96b681/SQL2019-SSEI-Expr.exe'
         }
     }
-
+    
     # Parameters for Cmdlets can be assembled as hash table
     $parameters = @{
         Source = $downloadPath
-        # Defaults to Download folder of user
-        Destination = (
-                New-Object -ComObject Shell.Application
-            ).NameSpace(
-                'shell:Downloads'
-            ).Self.Path
-
     }
     if (-not [String]::IsNullOrWhiteSpace($BootstrapPath)) {
         $parameters.Destination = $BootstrapPath
     }
     # To use a hashtable as parameter set, instead of preceeding the variable
     # name with $, preceed it with an @ sign.
-    $bitsJob = Start-BitsTransfer @parameters -
 
     # Get the full path of the downloaded setup file
-    $setupFile = $bitsJob.FileList[0].LocalName
+    $setupFile = Start-Download @parameters
 
     #endregion
 
 
     #region Build the parameters
     $parameters = '/IACCEPTSQLSERVERLICENSETERMS /QUIET '
-    $parameters += "/LANGUAGE:$language "
+    if ($Language -eq 'en-us') {
+        $parameters +="/ENU "
+    }
+    if ($Language -ne 'en-us') {
+        $parameters += "/LANGUAGE:$Language "
+    }
 
     if (-not [String]::IsNullOrWhiteSpace($MediaPath)) {
         $parameters += "/MEDIAPATH:""$MediaPath"" "
@@ -171,14 +228,14 @@ function Install-SqlServer {
     $itemPropertyValue = Get-ItemPropertyValue `
         -Path $itemPath `
         -Name $itemPropertyName
-    $winSystemLocale = (Get-WinSystemLocale).Name
+    # $winSystemLocale = (Get-WinSystemLocale).Name
     
-    $message = "Setting $itemPropertyName in $itemPath to $winSystemLocale"
+    $message = "Setting $itemPropertyName in $itemPath to $Language"
     if ($PSCmdlet.ShouldProcess($message)) {
         Set-ItemProperty `
             -Path $itemPath `
             -Name $itemPropertyName `
-            -Value $winSystemLocale        
+            -Value $Language      
     }
     #endregion
     
@@ -299,23 +356,16 @@ function Install-SqlServerManagementStudio {
     # Parameters for Cmdlets can be assembled as hash table
     $parameters = @{
         Source = $downloadPath
-        # Defaults to Download folder of user
-        Destination = (
-                New-Object -ComObject Shell.Application
-            ).NameSpace(
-                'shell:Downloads'
-            ).Self.Path
-
     }
     if (-not [String]::IsNullOrWhiteSpace($BootstrapPath)) {
         $parameters.Destination = $BootstrapPath
     }
     # To use a hashtable as parameter set, instead of preceeding the variable
     # name with $, preceed it with an @ sign.
-    $bitsJob = Start-BitsTransfer @parameters
+    $setupFile = Start-Download @parameters
 
     # Get the full path of the downloaded setup file
-    $setupFile = $bitsJob.FileList[0].LocalName
+    $setupFile = $bitsTransfer.FileList[0].LocalName
     
     #endregion
 

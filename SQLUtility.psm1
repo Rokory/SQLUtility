@@ -509,6 +509,12 @@ function Get-SqlDataReader {
         $Connection
     )
 
+    # If connection is not open, open it
+    if ($Connection.State -ne 'Open') {
+        $Connection.Open()
+    }
+    
+
     # Create a command object
     $sqlCommand = New-Object `
         -TypeName System.Data.SqlClient.SqlCommand `
